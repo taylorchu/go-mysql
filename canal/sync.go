@@ -101,7 +101,11 @@ func (c *Canal) runSyncBinlog() error {
 			}
 		case *replication.MariadbGTIDEvent:
 			// try to save the GTID later
-			gtid := &e.GTID
+			gtid, err := mysql.ParseMariadbGTIDSet(e.GTID.String())
+			if err != nil {
+				return errors.Trace(err)
+			}
+
 			if err := c.eventHandler.OnGTID(gtid); err != nil {
 				return errors.Trace(err)
 			}
@@ -239,7 +243,12 @@ func (c *Canal) GetMasterPos() (mysql.Position, error) {
 }
 
 func (c *Canal) GetMasterGTIDSet() (mysql.GTIDSet, error) {
-	rr, err := c.Execute("SELECT @@GLOBAL.GTID_EXECUTED")
+	var selectGTID = "SELECT @@GLOBAL.GTID_EXECUTED"
+	if c.cfg.Flavor == mysql.MariaDBFlavor {
+		selectGTID = "SELECT @@GLOBAL.gtid_current_pos"
+	}
+
+	rr, err := c.Execute(selectGTID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
